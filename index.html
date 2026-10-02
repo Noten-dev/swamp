@@ -362,12 +362,7 @@ justify-content:flex-end;align-items:baseline;gap:6px 14px;font-size:13px;}
 <div id="screen"><div id="box">
 <h1>СТАРЫЕ ТРОПЫ</h1>
 <p>Огромная карта лежит на столе под тёплой лампой, а резные деревянные фигурки ждут, когда их возьмёт рука.<br>
-Бросай кубик, веди фигурку по тропам и выбирай пути на развилках.<br>
-Неизведанные точки скрыты ❓ — что там, узнаешь, лишь когда ступишь на них.<br>
-Собирай артефакты, рискуй у капищ и не доверяй белкам.<br>
-За столом — до 4 игроков, ходят по очереди.<br>
-За порядок прихода начисляются бонусные звёзды: +7★ первому, +5★ второму, +3★ третьему, +1★ четвёртому.
-Итог = ★ + ● + ♥: у кого больше, тот и победил.</p>
+Бросай кубик, веди фигурку по тропам и выбирай пути на развилках.<br></p>
 <div class="sel"><span class="selT">ИГРОКИ</span><span class="selB" id="selH"></span></div>
 <div id="selCls"></div>
 <div id="clsHint" class="dim"></div>
@@ -376,7 +371,7 @@ justify-content:flex-end;align-items:baseline;gap:6px 14px;font-size:13px;}
 <div id="rules" class="hidden">
 • Пробел — бросок кубика. Камера сама подлетит к лотку и вернётся к фигурке.<br>
 • 🔁 У каждого есть один переброс: после броска кубик можно бросить заново. ВЕДЬМИН КРУГ иногда дарит ещё один.<br>
-• Карта длинная — 24 яруса троп. Неизведанные точки отмечены ❓: что там, узнаешь, только ступив туда.<br>
+• Неизведанные точки отмечены ❓: что там, узнаешь, только ступив туда.<br>
 • На развилке выбирай путь клавишами 1–4. 🧭 Компас заранее раскрывает неизвестные тропы.<br>
 • ☠ Опасность — это выбор: красться осторожно (−1♥ наверняка) или рискнуть (обычно 55% на +2★ и 45% на −2♥; погода меняет шансы, а ночью награда выше).<br>
 • ✪ Капище: принеси дар (−2 золота → +4★), помолись (50%: +1♥ / +1★) или ограбь (+3 золота, −3★ и шанс получить проклятие).<br>
@@ -591,9 +586,9 @@ function grantRelic(p,r){
 if(p.relics.includes(r)){p.pts+=2;return 'Этот артефакт у тебя уже есть. Тропа обращает дар в славу: +2★.';}
 p.relics.push(r);const RR=RELICS[r];return 'Добыча: '+RR.icon+' '+RR.name+' — '+RR.desc;}
 /* --- генерация большого графа карты (24 яруса) --- */
-const TIERS=24;
+const TIERS=36;
 const STEP=30;
-const MAP_W=124, MAP_L=TIERS*STEP+44;
+const MAP_W=150, MAP_L=TIERS*STEP+44;
 const Z_TOP=TIERS*STEP/2;
 const TRAY={x:MAP_W/2+13, z:MAP_L/2-16};
 const CANDLE={x:-MAP_W/2-14, z:-8};
@@ -1098,7 +1093,7 @@ for(let i=0;i<16;i++)TREE_MATS.push(new THREE.MeshStandardMaterial({
   roughness:1
 }));
 
-for(let i=0;i<1020;i++){
+for(let i=0;i<1600;i++){
   const s=freeSpot(4.2,2.8);
   if(!s) continue;
 
@@ -4790,7 +4785,7 @@ function gameOver(){
     row.innerHTML = `
       <div class="sr-name">
         <b style="color:${pd.p.color}">${cls?cls.icon+' ':''}${pd.p.name}</b>
-        <div class="sr-stats">${cls?cls.name+' • ':''}шагов ${pd.stats.trav} • ярус ${pd.stats.tier} • событий ${pd.stats.ev} • артеф. ${pd.stats.relics}</div>
+        <div class="sr-stats">${cls?cls.name+' • ':''}шагов ${pd.stats.trav} • событий ${pd.stats.ev} • артеф. ${pd.stats.relics}</div>
         ${badges.length?'<div class="sr-badges">'+badges.map((b,i)=>'<span class="badge" style="animation-delay:'+(1000+i*90)+'ms" title="'+b.name+': '+b.d+'">'+b.icon+'</span>').join('')+'</div>':''}
       </div>
       <div class="score-breakdown">
