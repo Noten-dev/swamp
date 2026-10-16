@@ -1,8 +1,4 @@
 
-
-
-
-
 <!DOCTYPE html>
 <html lang="ru">
 <head>
@@ -18,7 +14,7 @@ html,body{margin:0;height:100%;background:#000;overflow:hidden;font-family:'Pres
 cursor:grab;touch-action:none;}
 body.orbiting #c{cursor:grabbing;}
 #fx{position:fixed;inset:0;pointer-events:none;z-index:2;
-background:radial-gradient(ellipse at 50% 45%, transparent 48%, rgba(0,0,0,.6) 100%);}
+background:radial-gradient(ellipse at 50% 45%, transparent 40%, rgba(0,0,0,.2) 66%, rgba(0,0,0,.46) 86%, rgba(0,0,0,.72) 100%);}
 #fx::after{content:'';position:absolute;inset:0;
 background:repeating-linear-gradient(0deg, rgba(0,0,0,.12) 0 1px, transparent 1px 3px);}
 #flash{position:fixed;inset:0;pointer-events:none;z-index:3;
@@ -77,7 +73,10 @@ border-radius:7px;cursor:help;}
 100%{box-shadow:0 0 0 rgba(255,210,60,0);transform:scale(1);}}
 #wChip{position:fixed;top:10px;left:10px;z-index:5;background:rgba(20,14,8,.85);border:2px solid #000;
 color:#e8d7a7;padding:9px 12px;font-size:11px;line-height:1.8;}
-#tools{position:fixed;top:10px;right:10px;display:flex;gap:6px;z-index:7;}
+/* z-index 12: панель выше пергамента (#modal, z10) — музыка/звук/обзор/легенда
+   доступны даже во время событий и сцен, но ниже экрана передачи (#pass, z15)
+   и меню/итогов (#screen, z20) — там они по-прежнему спрятаны. */
+#tools{position:fixed;top:10px;right:10px;display:flex;gap:6px;z-index:12;}
 #tools button{font-size:13px;padding:8px 10px;}
 #banner{position:fixed;top:32%;left:0;right:0;text-align:center;z-index:8;pointer-events:none;
 font-size:clamp(13px,2.8vw,24px);letter-spacing:2px;color:#ff8a2a;
@@ -181,11 +180,18 @@ transition:opacity .4s ease;}
 #mBtns button{opacity:0;animation:btnIn .3s ease forwards;}
 @keyframes btnIn{from{opacity:0;transform:translateX(-18px);}to{opacity:1;transform:translateX(0);}}
 
+/* ===== 🤖 ВЫБОР БОТА: кнопки пергамента заперты для человека =====
+   Бот «читает» модалку и жмёт кнопку сам (программно), а человек во время
+   его хода не может вмешаться ни мышью (pointer-events:none), ни с
+   клавиатуры (disabled). Внешне кнопки приглушены — видно, что они чужие. */
+#modal.botPick #mBtns{cursor:not-allowed;}
+#modal.botPick #mBtns button{pointer-events:none;filter:grayscale(.45) brightness(.82);}
+
 /* ===== СЦЕНИЧЕСКИЙ РЕЖИМ: карта свёрнута, на столе диорама ===== */
 #hud{transition:opacity .5s ease;}
 body.staging #hud{opacity:.16;}
 body.staging #logToggle{opacity:.25;}
-body.staging #fx{background:radial-gradient(ellipse at 50% 40%, transparent 38%, rgba(0,0,0,.72) 100%);}
+body.staging #fx{background:radial-gradient(ellipse at 50% 40%, transparent 33%, rgba(0,0,0,.28) 62%, rgba(0,0,0,.6) 84%, rgba(0,0,0,.82) 100%);}
 /* пергамент уезжает вниз, чтобы сцена была видна */
 #modal.staged{align-items:flex-end;
 background:linear-gradient(to top, rgba(0,0,0,.62) 0%, rgba(0,0,0,.30) 38%, rgba(0,0,0,0) 72%);}
@@ -257,6 +263,8 @@ animation:badgePop .45s cubic-bezier(.2,.9,.3,1.4) both;}
 .clsRow{display:flex;align-items:center;gap:10px;justify-content:center;flex-wrap:wrap;}
 .clsRow .selB{flex-wrap:wrap;justify-content:center;}
 .clsRow .selB button{font-size:8px;padding:9px 9px;white-space:nowrap;}
+/* ===== 🤖 СЧЁТЧИК БОТОВ: недоступные значения гаснут и не жмутся ===== */
+.selB button:disabled{pointer-events:none;}
 #clsHint{font-size:8px;color:#9a8a62;line-height:2;margin-top:6px;min-height:16px;}
 
 /* ===== КРУПНЫЕ ЭКРАНЫ: окна HUD растут вместе с разрешением ===== */
@@ -363,7 +371,8 @@ justify-content:flex-end;align-items:baseline;gap:6px 14px;font-size:13px;}
 <h1>СТАРЫЕ ТРОПЫ</h1>
 <p>Огромная карта лежит на столе под тёплой лампой, а резные деревянные фигурки ждут, когда их возьмёт рука.<br>
 Бросай кубик, веди фигурку по тропам и выбирай пути на развилках.<br></p>
-<div class="sel"><span class="selT">ИГРОКИ</span><span class="selB" id="selH"></span></div>
+<div class="sel"><span class="selT">👤 ЛЮДИ</span><span class="selB" id="selH"></span></div>
+<div class="sel"><span class="selT">🤖 БОТЫ</span><span class="selB" id="selBots"></span></div>
 <div id="selCls"></div>
 <div id="clsHint" class="dim"></div>
 <button id="goBtn">В ПОХОД!</button><br>
@@ -380,6 +389,7 @@ justify-content:flex-end;align-items:baseline;gap:6px 14px;font-size:13px;}
 • 🪓 До похода выбери профессию каждой фигурке: ЛЕСНИЧИЙ меньше страдает от опасностей, ТОРГОВКА получает скидки и +2● на привале, ЗНАХАРКА всегда лечится у костра и не боится грибов, БРОДЯГА начинает с лишним перебросом и не боится дождя.<br>
 • ♥ здоровье, ● золото, ★ слава. Бонус финиша — по порядку прихода: первому +7★, второму +5★, третьему +3★, четвёртому +1★. Итог = ★ + ● + ♥.<br>
 • 🎭 События разыгрываются как спектакль: карта сворачивается гармошкой, на столе вырастает лес с декорациями, а после выбора всё убирается обратно.<br>
+• 🤖 Рядом с числом игроков выбирается число ботов: 1 человек — до 3 ботов, 2 человека — до 2, 3 человека — один бот, а на 4 человек ботов не бывает. Люди ходят первыми. Бот сам бросает кубик, выбирает тропы на развилках и решения в сценах; у каждого свой характер: 🐢 осторожный, 💰 жадный или 🎲 азартный — он влияет на риск, развилки и события. Пока бот думает, кнопки пергамента приглушены и не нажимаются — решить за него не выйдет.<br>
 • 👥 В компании между ходами появляется экран «передай стол»: на нём — сводка статусов всех путников (♥ здоровье, ● золото, ★ слава, 🔁 перебросы, 🧿 плащи, артефакты и эффекты). Карты открыты, а планы — нет.<br>
 • ❓ Лес хранит 36 разных событий: от Перевозчика и Спящего тролля до Радуги и Тайника воров. Каждая точка «событие ?» может преподнести любой сюрприз.<br>
 • 👑 На самом краю карты живёт Хозяин Леса: он видит весь твой путь — артефакты, доброту, молитвы и краденые дары — и выносит один из семи вердиктов: от «ДРУГ ЛЕСА» (+5★ и полное здоровье) через «ЛЕС КИВАЕТ ТЕБЕ» (+2★ и +2●) до «ЛЕС РАЗГНЕВАН» (−2★ за краденое).<br>
@@ -387,6 +397,7 @@ justify-content:flex-end;align-items:baseline;gap:6px 14px;font-size:13px;}
 • 🏅 В конце похода на табло выдают деревянные значки за подвиги: «Белкин друг», «Гроза капищ», «Ползком, но дополз» и другие.<br>
 • Каждый раунд меняется погода: туман, дождь, ночь со светлячками — лес звучит по-разному. Дождь мешает отдыху у костра, ночь щедрее к молитвам у капища.<br>
 • 🎥 Камера: тяни мышью (или пальцем), чтобы облететь фигурку; двойной клик — вернуть привычный вид. Колесо — зум, O — обзор, L — легенда, M — музыка.
+• 🧰 Панель в правом верхнем углу (🎵 🔊 🗺 ℹ ⟳) доступна всегда — даже во время событий и сцен: музыку и звук можно переключить, не дожидаясь конца постановки. ℹ не открывается поверх идущей сцены — легенда и пергамент события живут в одном окне.
 </div>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
 <script>
@@ -870,9 +881,18 @@ g.beginPath();g.ellipse(R(0,mapBase.width),R(0,mapBase.height),R(20,90),R(14,60)
 g.strokeStyle='rgba(60,45,20,.12)';g.lineWidth=1;
 for(let i=64;i<mapBase.width;i+=64){g.beginPath();g.moveTo(i,0);g.lineTo(i,mapBase.height);g.stroke();}
 for(let i=64;i<mapBase.height;i+=64){g.beginPath();g.moveTo(0,i);g.lineTo(mapBase.width,i);g.stroke();}
-g.strokeStyle='rgba(16,12,8,.9)';g.lineWidth=5;g.setLineDash([12,9]);
+/* тропа между клетками: тоньше и с мелким штрихом, чтобы не спорить с фигуркой
+   (подставка Ø≈3.2 мировых единицы = ~11.6 px, а штрих был 12 px) */
+g.strokeStyle='rgba(16,12,8,.85)';g.lineWidth=3;g.setLineDash([6,5]);
 EDGES.forEach(e=>{const a=NODES[e[0]],b=NODES[e[1]];
-g.beginPath();g.moveTo(MX(a.x),MY(a.z));g.lineTo(MX(b.x),MY(b.z));g.stroke();});
+const ax=MX(a.x),az=MY(a.z),bx=MX(b.x),bz=MY(b.z);
+const d=Math.hypot(bx-ax,bz-az)||1;
+/* обрываем тропу у краёв значков, а не гоним сквозь них */
+const pad=13/d;
+g.beginPath();
+g.moveTo(ax+(bx-ax)*pad,az+(bz-az)*pad);
+g.lineTo(bx-(bx-ax)*pad,bz-(bz-az)*pad);
+g.stroke();});
 g.setLineDash([]);}
 function stampIcon(g,n){
 if(n.t==='skull'){g.beginPath();g.arc(0,-3,15,Math.PI,0);g.lineTo(15,4);g.lineTo(-15,4);g.closePath();g.fill();
@@ -911,9 +931,11 @@ if(y<-40||y>sh+40)return;      /* не наша полоса */
 g.save();g.translate(MX(n.x),y);g.globalAlpha=.92;g.fillStyle='#15100a';
 if(revealed.has(n.id)){stampIcon(g,n);}
 else{
-g.globalAlpha=.55;g.strokeStyle='#15100a';g.lineWidth=3;g.setLineDash([6,5]);
-g.beginPath();g.arc(0,0,15,0,7);g.stroke();g.setLineDash([]);
-g.font='bold 18px monospace';g.textAlign='center';g.fillText('?',0,6);}
+/* кружок неизведанной клетки компактнее: был r15 (Ø≈8 мировых единиц —
+   вдвое шире подставки фигурки), стал r11 */
+g.globalAlpha=.55;g.strokeStyle='#15100a';g.lineWidth=2.5;g.setLineDash([5,4]);
+g.beginPath();g.arc(0,0,11,0,7);g.stroke();g.setLineDash([]);
+g.font='bold 14px monospace';g.textAlign='center';g.fillText('?',0,5);}
 g.restore();});
 if(k===0){
 /* название и роза ветров живут на верхней полосе */
@@ -1469,7 +1491,7 @@ const m=new THREE.Mesh(new THREE.PlaneGeometry(9,12.6),
 new THREE.MeshBasicMaterial({map:new THREE.CanvasTexture(cv)}));
 m.rotation.x=-Math.PI/2;m.rotation.z=.5;m.position.set(MAP_W/2+16,.15,-40);scene.add(m);regScatter(m);})();
 /* ============================================================
-ФИГУРКИ, СТРЕЛКА, КУБИК (без ботов)
+ФИГУРКИ, СТРЕЛКА, КУБИК
 ============================================================ */
 const PCOLORS=['#c94f4f','#4f7fc9','#4fc97a','#c9b44f','#9a5fc9','#ff8a3c','#4fc9c9'];
 const PNAMES=['КРАСНЫЙ','СИНИЙ','ЗЕЛЁНЫЙ','ЖЁЛТЫЙ','ФИОЛЕТОВЫЙ','РЫЖИЙ','БИРЮЗОВЫЙ'];
@@ -1901,6 +1923,12 @@ function updateWChip(){
 const modal=document.getElementById('modal'),mT=document.getElementById('mTitle'),
 mX=document.getElementById('mText'),mB=document.getElementById('mBtns');
 let modalChoices=[];
+/* ===== 🤖 ПЕРЕМЕННЫЕ БОТОВ =====
+   modalForBot — модалка открыта во время хода бота (её закроет сам бот);
+   таймеры — отложенный бросок кубика и отложенный выбор кнопки. */
+let modalTitleNow='',modalForBot=false;
+let botRollT=null,botPickT=null,botActT=null;
+const botActive=()=>!!(players[cur]&&players[cur].bot&&mode!=='MENU'&&mode!=='END');
 const paper=document.getElementById('paper');
 let typeTimer1=null,isTyping=false,typeFull='',typePos=0,typedSpan=null,pendingChoices=[];
 /* тихий «андертейловский» блип при печати */
@@ -1909,6 +1937,10 @@ const sBlip=()=>beep(460,.035,'square',.028);
 function showModal(title,text,choices,staged){
   pendingChoices=choices||[];
   modalChoices=[];                    // пока текст печатается — выбор заблокирован
+  modalTitleNow=String(title||'');
+  /* модалка «для бота»: ход бота, игра идёт, и это не «Легенда» (её читает человек) */
+  modalForBot=!!(players[cur]&&players[cur].bot&&mode!=='MENU'&&mode!=='END'&&modalTitleNow!=='ЛЕГЕНДА');
+  modal.classList.toggle('botPick',modalForBot);   /* 🤖 кнопки пергамента становятся «чужими» */
   mT.textContent=title;
   mX.innerHTML='';
   typedSpan=document.createElement('span');
@@ -1926,6 +1958,13 @@ function showModal(title,text,choices,staged){
   clearInterval(typeTimer1);
   isTyping=true;typeFull=String(text);typePos=0;
   typedSpan.textContent='';
+  if(modalForBot){
+    /* 🤖 бот «читает» мгновенно: весь текст сразу, пауза — перед выбором */
+    typedSpan.textContent=typeFull;
+    typePos=typeFull.length;
+    setTimeout(completeTyping,240);
+    return;
+  }
   typeTimer1=setInterval(()=>{
     typePos++;
     typedSpan.textContent=typeFull.slice(0,typePos);
@@ -1939,6 +1978,7 @@ function completeTyping(){
   clearInterval(typeTimer1);isTyping=false;
   if(typedSpan)typedSpan.textContent=typeFull;
   buildChoices(pendingChoices);
+  if(modalForBot)scheduleBotPick();   /* 🤖 бот выбирает сам, с паузой «на подумать» */
 }
 
 function buildChoices(choices){
@@ -1950,12 +1990,18 @@ function buildChoices(choices){
     b.onclick=()=>{sClick();b.blur();c.cb&&c.cb();};
     if(c.onenter)b.onmouseenter=c.onenter;
     if(c.onleave)b.onmouseleave=c.onleave;
+    /* 🤖 во время хода бота кнопки только для чтения: ни мышью, ни с клавиатуры */
+    if(modalForBot){b.disabled=true;}
     mB.appendChild(b);
   });
 }
 
 function hideModal(){
   clearInterval(typeTimer1);isTyping=false;
+  clearTimeout(botPickT);botPickT=null;   /* 🤖 отменяем отложенный выбор бота */
+  clearTimeout(botActT);botActT=null;
+  modalForBot=false;
+  modal.classList.remove('botPick');   /* 🤖 человеку снова можно нажимать */
   modal.style.display='none';modal.classList.remove('show');
   mB.innerHTML='';                       /* кнопок не видно — их и нет */
   modalChoices=[];pendingChoices=[];
@@ -3854,7 +3900,202 @@ function changeWeather(){
   updateHUD();
 }
 /* ============================================================
-ИГРОВОЙ ЦИКЛ (только люди)
+БОТЫ: ДЕРЕВЯННЫЕ ФИГУРКИ С ХАРАКТЕРОМ
+Бот играет по тем же правилам, что и человек: сам бросает кубик,
+выбирает тропу на развилке и принимает решения в сценах — нажимая
+те же кнопки модалок. «Мозг» бота: база знаний о 36 событиях
+(EV_BRAIN) + оценка подписей кнопок + характер (mind): осторожный,
+жадный или азартный — он слегка меняет стиль решений.
+============================================================ */
+const BOT_MINDS=[
+  {id:'cautious',name:'осторожный',icon:'🐢'},
+  {id:'greedy',  name:'жадный',    icon:'💰'},
+  {id:'brave',   name:'азартный',  icon:'🎲'}
+];
+let botMindDeck=BOT_MINDS.slice(),botMindI=0;   /* колода характеров на партию */
+/* ---- База знаний событий: индекс кнопки под ситуацию ----
+   Индексы соответствуют порядку вариантов в модалке события.
+   Учтены золото, здоровье, профессия и собранные артефакты. */
+const EV_BRAIN={
+'НЕЗНАКОМЕЦ В ТУМАНЕ':p=>0,                     /* помочь: +4★ −1♥, лес запомнит добро */
+'ВОЛК':p=>1,                                    /* замереть: 50% +3★ вместо −1♥ наверняка */
+'ГРИБЫ НА ПНЕ':p=>p.cls==='herbalist'?0:1,      /* знахарке грибы полезны, остальным — в котомку */
+'ТОПЬ С СОКРОВИЩЕМ':p=>0,                       /* +4● −1♥ — выгодно */
+'СТРАНСТВУЮЩИЙ ТОРГОВЕЦ':p=>{
+  if(!p.relics.includes('boots')&&p.gold>=mCost(p,3))return 2;   /* 🥾 сапоги: +1 к каждому броску */
+  if(p.gold>=mCost(p,1))return 0;                                /* амулет: −1● → +3★ */
+  return 3;},                                                    /* без золота — мимо */
+'ЭХО В ЛОЩИНЕ':p=>p.hp<=3?1:0,                  /* +2★ или +1♥ по здоровью */
+'ГНИЛОЙ МОСТ':p=>p.hp>=5?0:1,                   /* при полном ♥ — азартнее */
+'БЕЛКА С ОРЕХОМ':p=>1,                          /* поделиться: +3★ и друг перед Хозяином Леса */
+'ЗАБРОШЕННЫЙ ЛАГЕРЬ':p=>p.hp<=2?1:0,            /* +3● или +1♥+1★ */
+'ЛОВЕЦ СНОВ':p=>0,                              /* +3★ наверняка */
+'КАМЕННЫЙ ИДОЛ':p=>p.gold>=1?0:1,               /* монета: −1● → +4★ */
+'РОЙ ДИКИХ ПЧЁЛ':p=>p.hp>=2?0:1,                /* 50% +4● — если здоровье позволяет */
+'ПЕСНЬ ИЗ-ПОД КОРНЕЙ':p=>0,                     /* +3★ */
+'ДОЖДЬ ИЗ ЖЕЛУДЕЙ':p=>p.hp<=3?1:0,              /* +2● или +1♥ */
+'ТЕНЬ МЕЖДУ СОСЕН':p=>p.mind==='cautious'?1:0,  /* 50% +5★ против +2★ наверняка */
+'КУВШИН МОЛОКА НА ПНЕ':p=>p.hp<=3?0:(p.gold>=1?1:0),  /* −1● → +3★, но сперва подлечиться */
+'ПЛАЩ НА ВЕТКЕ':p=>p.hp<=3?1:0,                 /* 🧿 плащ или +2♥ вздремнуть */
+'ВЕДЬМИН КРУГ':p=>1,                            /* +1★ наверняка; круг часто кусается */
+'САПОГИ У ПНЯ':p=>p.relics.includes('boots')?1:0,  /* надеть 🥾; если уже есть — продать */
+'БЛУЖДАЮЩИЙ ОГОНЬ':p=>0,                        /* 50% +4★ */
+'СОРОКА-ВОРОВКА':p=>0,                          /* догнать: отобрать золото у лидера */
+'ЗЕРКАЛЬНАЯ ГЛАДЬ':p=>p.hp<=3?1:0,              /* +2★ или +1♥ */
+'МЕДВЕЖЬЯ БЕРЛОГА':p=>p.hp>=4?0:1,              /* 50% +4● — только здоровяком */
+'ДРЕВНИЙ СТРАЖ':p=>0,                           /* загадка: 50% +4★ */
+'ПЕРЕВОЗЧИК':p=>2,                              /* вёсла: +1★ и 🧭 компас в подарок */
+'УПАВШАЯ ЗВЕЗДА':p=>p.hp<=2?2:0,                /* коснуться: 50% +4★ */
+'ОЛЕНЁНОК В СИЛКАХ':p=>0,                       /* освободить: +3★ (знахарке +4★) */
+'СТАРЫЙ КОЛОДЕЦ':p=>p.hp<=2?2:(p.gold>=1?1:2),  /* цепь: 50% +4●; монета почти бесполезна */
+'СПЯЩИЙ ТРОЛЛЬ':p=>(p.gold>=2&&!p.relics.includes('whistle'))?1:0,  /* −2● → +2★ и 🎐 свисток */
+'ЛАГЕРЬ КАРТОГРАФА':p=>p.inspired?2:1,          /* +2★ и 🔮 вдохновение */
+'ПОЛЯНА СВЕТЛЯЧКОВ':p=>p.relics.includes('lantern')?1:(p.hp<=3?1:0),  /* 🏮 фонарь или +1♥ и 🔮 */
+'ПРИДОРОЖНАЯ ЧАСОВНЯ':p=>(p.curse&&p.gold>=2)?1:0,  /* молитва; пожертвование снимает 🕯 проклятие */
+'ПОЛЕ ДРЕВНЕЙ БИТВЫ':p=>2,                      /* курган памяти: +3★ */
+'РАДУГА ПОСЛЕ ДОЖДЯ':p=>p.hp<=2?2:1,            /* +2★ (в дождь +3★) */
+'СВИРЕЛЬ ПАСТУХА':p=>0,                         /* песня: +2★ и 🔁 переброс */
+'ТАЙНИК ВОРОВ':p=>1                             /* монета взамен: −1● → +3★ */
+};
+/* ---- Развилка: насколько боту нравится каждая тропа ---- */
+function botForkScore(p,label){
+const s=label.toUpperCase();
+let w=20;
+if(s.includes('ФИНИШ'))w=1000;
+else if(s.includes('ПРИВАЛ'))w=62;
+else if(s.includes('КЛАД'))w=58;
+else if(s.includes('КАПИЩЕ'))w=p.gold>=2?52:30;
+else if(s.includes('СОБЫТИЕ'))w=46;
+else if(s.includes('ТУМАН')||s.includes('НЕИЗВЕСТНО'))w=34;
+else if(s.includes('ОПАСНОСТЬ'))w=p.hp>=3?16:4;
+else if(s.includes('ПОЛЯНА'))w=24;
+if(p.mind==='brave'){
+if(s.includes('ОПАСНОСТЬ'))w+=14;
+if(s.includes('ТУМАН')||s.includes('НЕИЗВЕСТНО'))w+=8;}
+if(p.mind==='cautious'){
+if(s.includes('ОПАСНОСТЬ'))w-=12;
+if(s.includes('ПРИВАЛ'))w+=10;
+if(s.includes('ТУМАН')||s.includes('НЕИЗВЕСТНО'))w-=8;}
+if(p.mind==='greedy'){
+if(s.includes('КЛАД'))w+=14;
+if(s.includes('КАПИЩЕ'))w-=8;}
+return w+R(-4,4);
+}
+/* ---- Опасность ☠: красться, рискнуть или свистнуть ---- */
+function botDanger(p,choices){
+let riskIdx=-1,whistleIdx=-1,chance=55;
+choices.forEach((c,i)=>{
+const s=String(c.l);
+if(/рискнуть/i.test(s)){riskIdx=i;const m=s.match(/(\d+)\s*%/);if(m)chance=+m[1];}
+if(s.includes('🎐'))whistleIdx=i;});
+if(p.hp<=1)return whistleIdx>=0?whistleIdx:0;   /* на дне здоровья — беречься */
+if(riskIdx<0)return 0;
+let pr=chance/100;                              /* решимость ≈ шансу успеха */
+if(p.mind==='brave')pr=Math.min(.95,pr+.3);
+if(p.mind==='cautious')pr=(chance>=65&&p.hp>=3)?.5:.1;
+return Math.random()<pr?riskIdx:0;
+}
+/* ---- Привал 🔥 ---- */
+function botCamp(p){
+const healMod=(typeof W().healMod==='number')?W().healMod:1;
+const willHeal=(p.cls==='herbalist')||healMod>=1;
+if(p.hp<=2)return 0;                            /* сперва лечимся */
+if(p.hp>=5)return p.mind==='greedy'?1:2;        /* здоров — обыск или байки */
+if(willHeal&&Math.random()<.55)return 0;
+return Math.random()<.5?1:2;
+}
+/* ---- Капище ✪: дар, молитва или грабёж ---- */
+function botAltar(p){
+if(p.gold>=2){
+if(p.mind==='greedy'&&Math.random()<.3)return 1;
+return Math.random()<.6?0:1;}                   /* дар −2●→+4★ против молитвы */
+return 1;                                       /* без золота — только молиться (Хозяин Леса ценит) */
+}
+/* ---- Кубик: идти или перебросить ---- */
+function botDiceChoice(p,choices){
+if(choices.length<2)return 0;
+const m=String(choices[0].l).match(/идти на\s*(\d+)/i);
+const go=m?+m[1]:3;
+if(go<=2)return 1;                              /* мало — переброс */
+if(go===3)return Math.random()<.55?1:0;
+return 0;
+}
+/* ---- Неизвестная модалка: анализ подписей кнопок ---- */
+function botGeneric(p,choices){
+let best=0,bw=-1e9;
+choices.forEach((c,i)=>{
+const s=String(c.l).toUpperCase();
+let w=R(0,2);
+if(/[−-]\s*\d/.test(s))w-=2;                    /* явная цена в подписи — не любим */
+if(s.includes('БЕСПЛАТНО'))w+=2;
+if(/ОСТАВИТЬ|ПРОЙТИ МИМО|УЙТИ|ОБОЙТИ|ОТМАХН/.test(s))w+=(p.mind==='cautious'?2:0);
+if(/ЗАБРАТЬ|ВСКРЫТЬ|ОГРАБИТЬ|ОБЫСКАТЬ/.test(s))w+=(p.mind==='greedy'?2:-1);
+if(/РИСК|ЗАСАД|СУНУТЬ|ПОЛЕЗТЬ|ЛЕЗТЬ/.test(s))w+=(p.mind==='brave'?2:-1);
+if(w>bw){bw=w;best=i;}});
+return best;
+}
+/* ---- Главный «мозг»: какой вариант выбрать ---- */
+function botDecide(title,choices){
+const p=players[cur];
+if(!p)return 0;
+const n=choices.length;
+if(n<=1)return 0;                               /* «Идти дальше», «Продолжить» — жмём */
+const T=String(title).toUpperCase();
+let idx=null;
+if(T==='КУБИК')idx=botDiceChoice(p,choices);
+else if(T==='РАЗВИЛКА'){
+let bw=-1e9;
+choices.forEach((c,i)=>{const w=botForkScore(p,String(c.l));if(w>bw){bw=w;idx=i;}});
+}else if(T.includes('ОПАСНОСТЬ'))idx=botDanger(p,choices);
+else if(T==='ПРИВАЛ')idx=botCamp(p);
+else if(T.includes('КАПИЩЕ'))idx=botAltar(p);
+else if(T.startsWith('СОБЫТИЕ')){
+const key=T.replace(/^СОБЫТИЕ:\s*/,'').trim();
+const brain=EV_BRAIN[key];
+if(brain){try{idx=brain(p);}catch(e){idx=null;}}
+if(idx==null)idx=botGeneric(p,choices);
+if(p.mind==='brave'&&Math.random()<.1)idx=RI(0,n-1);  /* азарт иногда побеждает расчёт */
+}
+if(idx==null||!(idx>=0&&idx<n))idx=botGeneric(p,choices);
+return clamp(Math.round(idx),0,n-1);
+}
+/* ---- Бот выбирает вариант в открытой модалке ---- */
+function scheduleBotPick(){
+clearTimeout(botPickT);
+const p=players[cur];
+if(!p||!p.bot||!modalForBot)return;
+/* пауза «на подумать» — пропорциональна тексту, но в разумных пределах */
+const wait=clamp(800+typeFull.length*7,1000,2600);
+botPickT=setTimeout(botPickStep,wait);
+}
+function botPickStep(){
+if(!modalForBot||modal.style.display!=='flex'||!modalChoices.length)return;
+const p=players[cur];
+if(!p||!p.bot)return;
+let idx=0;
+try{idx=botDecide(modalTitleNow,modalChoices);}catch(e){idx=0;}
+idx=clamp(idx|0,0,modalChoices.length-1);
+const c=modalChoices[idx];
+log('🤖',p.name+' выбирает: '+String(c.l||'').replace(/^\d+\.\s*/,''),'info');
+if(c.onenter){try{c.onenter();}catch(e){}}      /* подсветить выбранную тропу на развилке */
+clearTimeout(botActT);
+botActT=setTimeout(()=>{
+botActT=null;
+if(modal.style.display!=='flex')return;
+if(c.onleave){try{c.onleave();}catch(e){}}
+/* кнопки во время хода бота заперты для человека (disabled + pointer-events:none),
+   поэтому бот «нажимает» не клик-событием, а напрямую: звук + колбэк выбора */
+sClick();
+if(c.cb)c.cb();
+},540);
+}
+function clearBotTimers(){
+clearTimeout(botRollT);botRollT=null;
+clearTimeout(botPickT);botPickT=null;
+clearTimeout(botActT);botActT=null;
+}
+/* ============================================================
+ИГРОВОЙ ЦИКЛ (люди и боты)
 ============================================================ */
 function startGame(nH){
   document.getElementById('screen').classList.add('hidden');
@@ -3866,8 +4107,14 @@ function startGame(nH){
     logToggleBtn.classList.remove('hidden');
   }
 
+  /* 🤖 характеры ботов раздаём вразнобой, чтобы компания не была одинаковой */
+  botMindDeck=BOT_MINDS.slice().sort(()=>Math.random()-.5);
+  botMindI=0;
+
   for(let i=0;i<nH;i++){
     const clsId=CLASSES[(selCls[i]!==undefined?selCls[i]:i)%CLASSES.length].id;
+    const isBot=i>=selH;                        /* 👤 первые selH мест — люди, дальше 🤖 боты */
+    const mind=isBot?botMindDeck[botMindI++%botMindDeck.length]:null;
     const fig=makeFig(PCOLORS[i],clsId);
     const a=i/nH*Math.PI*2;
     const off=[Math.cos(a)*2.4,Math.sin(a)*2.4];
@@ -3875,7 +4122,9 @@ function startGame(nH){
     fig.position.set(NODES[0].x+off[0],0,NODES[0].z+off[1]);
 
     players.push({
-      name:PNAMES[i],
+      name:(isBot?'🤖 ':'')+PNAMES[i],
+      bot:isBot,
+      mind:mind?mind.id:null,
       color:PCOLORS[i],
       cls:clsId,
       hp:3,
@@ -3925,12 +4174,26 @@ function startGame(nH){
   setAmbient(true);   /* 🌧 шум леса под текущую погоду */
 
   log('🏕','Поход начался: '+nH+' '+plural(nH,['фигурка','фигурки','фигурок'])+' на тропе ('+players.map(p=>CLS[p.cls].icon).join(' ')+')','good');
+  players.filter(q=>q.bot).forEach(q=>{
+    const m=BOT_MINDS.find(x=>x.id===q.mind);
+    log('🤖',q.name+' — бот'+(m?', характер: '+m.name:'')+'. Играет сам.','info');
+  });
   startTurn(true);
 }
 function startTurn(first){
 const p=players[cur];
 const cls=CLS[p.cls];
 updateHUD();
+if(p.bot){
+/* 🤖 ход бота: кнопка не нужна — кубик бросится сам, с паузой «на раздумье» */
+banner(p.name+' '+(cls?cls.icon:'')+', ХОД БОТА',p.color);
+mode='ROLL_WAIT';rollBtn.classList.add('hidden');
+say(first?'ТРОПЫ УХОДЯТ ДАЛЬШЕ, ЧЕМ ВИДНО. Первым идёт '+p.name+' — деревянная фигурка сама знает, что делать!'
+:'Ход переходит: '+p.name+(cls?' — '+cls.name:'')+'. Бот думает и бросает кубик...');
+clearTimeout(botRollT);
+botRollT=setTimeout(()=>{botRollT=null;
+if(mode==='ROLL_WAIT'&&players[cur]===p)rollDice();},1500);
+return;}
 banner(p.name+' '+(cls?cls.icon:'')+', ТВОЙ ХОД',p.color);
 mode='ROLL_WAIT';rollBtn.classList.remove('hidden');
 say(first?'ТРОПЫ УХОДЯТ ДАЛЬШЕ, ЧЕМ ВИДНО. '+p.name+', твой ход!'
@@ -4099,12 +4362,20 @@ forkByIndex={};
 const a=NODES[players[cur].node];
 opts.forEach((o,i)=>{
 const b=NODES[o];
+/* пунктир идёт от кольца под фигуркой до кружка клетки, не протыкая их:
+   клетки минимум в 30 ед. друг от друга, запас 2.5+1.45 всегда помещается */
+const dx=b.x-a.x,dz=b.z-a.z;
+const len=Math.hypot(dx,dz)||1;
+const ux=dx/len,uz=dz/len,rA=2.5,rB=1.45;
 const geo=new THREE.BufferGeometry().setFromPoints([
-new THREE.Vector3(a.x,.7,a.z),new THREE.Vector3(b.x,.7,b.z)]);
+new THREE.Vector3(a.x+ux*rA,.7,a.z+uz*rA),
+new THREE.Vector3(b.x-ux*rB,.7,b.z-uz*rB)]);
 const line=new THREE.Line(geo,new THREE.LineDashedMaterial({
-color:i?0x7adcff:0xff8a2a,dashSize:1.6,gapSize:1.1,transparent:true,opacity:.95}));
+color:i?0x7adcff:0xff8a2a,dashSize:.9,gapSize:.6,transparent:true,opacity:.95}));
 line.computeLineDistances();
-const rr=new THREE.Mesh(new THREE.RingGeometry(1.4,1.9,20),
+/* кружки компактнее подставки фигурки (Ø≈3.2): внешний диаметр 2.6,
+   а при наведении (scale 1.3) — 3.4, ровно по габариту фигурки */
+const rr=new THREE.Mesh(new THREE.RingGeometry(.95,1.3,20),
 new THREE.MeshBasicMaterial({color:i?0x7adcff:0xff8a2a,transparent:true,opacity:.9,side:THREE.DoubleSide}));
 rr.rotation.x=-Math.PI/2;rr.position.set(b.x,.3,b.z);
 scene.add(line,rr);forkFx.push(line,rr);
@@ -4676,7 +4947,7 @@ showPassOrStart();}
 /* ===== ЭКРАН ПЕРЕДАЧИ ХОДА: стол переходит следующему игроку ===== */
 const passEl=document.getElementById('pass');
 function showPassScreen(p,cb){
-if(!passEl||players.length<2){cb&&cb();return;}
+if(!passEl||players.length<2||p.bot){cb&&cb();return;}   /* 🤖 боту стол передавать не нужно */
 mode='PASS';
 rollBtn.classList.add('hidden');
 const cls=CLS[p.cls];
@@ -4724,6 +4995,7 @@ if(players.length>1)showPassScreen(players[cur],()=>startTurn(false));
 else startTurn(false);}
 function gameOver(){
   mode='END';
+  clearBotTimers();          /* 🤖 партия окончена — никаких отложенных ходов */
   rollBtn.classList.add('hidden');
   unfocus();
   arrow.visible=ring.visible=false;
@@ -4930,20 +5202,28 @@ root.appendChild(c);}}
 /* ============================================================
 СТАРТОВЫЙ ЭКРАН, КНОПКИ, КЛАВИАТУРА
 ============================================================ */
-let selH=1;
+let selH=1;               /* 👤 сколько людей играет (ходят первыми) */
+let selB=1;               /* 🤖 сколько ботов в компании: от 0 до 4-selH */
 const selCls=[0,1,2,3];   /* индекс профессии для каждого места */
 const goBtn=document.getElementById('goBtn');
 function buildSel(){
 const h=document.getElementById('selH');
 for(let i=1;i<=4;i++){const btn=document.createElement('button');btn.textContent=i;btn.dataset.v=i;
-btn.onclick=()=>{sClick();selH=i;refreshSel();btn.blur();};h.appendChild(btn);}
+btn.onclick=()=>{sClick();selH=i;selB=Math.min(selB,4-i);refreshSel();btn.blur();};h.appendChild(btn);}
+/* 🤖 счётчик ботов: максимум — сколько свободных мест осталось после людей */
+const b=document.getElementById('selBots');
+for(let i=0;i<=3;i++){const btn=document.createElement('button');btn.textContent=i;btn.dataset.v=i;
+btn.onclick=()=>{sClick();selB=Math.min(i,4-selH);refreshSel();btn.blur();};b.appendChild(btn);}
 refreshSel();}
 function buildClsRows(){
 const w=document.getElementById('selCls');if(!w)return;
 w.innerHTML='';
-for(let i=0;i<selH;i++){
+const total=selH+selB;
+for(let i=0;i<total;i++){
+const isBotRow=i>=selH;   /* 👤 первые selH мест — люди, остальные — 🤖 боты */
 const row=document.createElement('div');row.className='clsRow';
-const t=document.createElement('span');t.className='selT';t.textContent=PNAMES[i];
+const t=document.createElement('span');t.className='selT';
+t.textContent=(isBotRow?'🤖 ':'👤 ')+PNAMES[i];
 t.style.color=PCOLORS[i];row.appendChild(t);
 const b=document.createElement('span');b.className='selB';
 CLASSES.forEach((c,ci)=>{
@@ -4955,7 +5235,7 @@ const j=selCls.indexOf(ci);
 if(j>=0&&j!==i)selCls[j]=selCls[i];   /* профессии меняются местами */
 selCls[i]=ci;
 const hint=document.getElementById('clsHint');
-if(hint)hint.textContent=PNAMES[i]+': '+c.desc;
+if(hint)hint.textContent=(i>=selH?'🤖 ':'')+PNAMES[i]+': '+c.desc;
 buildClsRows();};
 b.appendChild(btn);});
 row.appendChild(b);w.appendChild(row);}
@@ -4963,9 +5243,16 @@ const hint=document.getElementById('clsHint');
 if(hint&&!hint.textContent)hint.textContent=PNAMES[0]+': '+CLASSES[selCls[0]].desc;}
 function refreshSel(){
 document.querySelectorAll('#selH button').forEach(x=>x.classList.toggle('on',+x.dataset.v===selH));
-goBtn.textContent='В ПОХОД! ('+selH+(selH===1?' фигурка)':' фигурки)');
+const maxB=4-selH;
+document.querySelectorAll('#selBots button').forEach(x=>{
+const v=+x.dataset.v;
+x.disabled=v>maxB;                       /* 🤖 больше ботов, чем свободных мест, — нельзя */
+x.classList.toggle('on',v===selB&&v<=maxB);});
+const total=selH+selB;
+goBtn.textContent='В ПОХОД! ('+total+' '+plural(total,['фигурка','фигурки','фигурок'])+
+(selB?(selH?' • '+selH+' 👤 + '+selB+' 🤖':' • только 🤖 '+selB):'')+')';
 buildClsRows();}
-goBtn.onclick=()=>{ensureAC();sClick();startGame(selH);};
+goBtn.onclick=()=>{ensureAC();sClick();startGame(selH+selB);};
 document.getElementById('rulesBtn').onclick=function(){
 document.getElementById('rules').classList.toggle('hidden');sClick();this.blur();};
 buildSel();
@@ -5001,9 +5288,10 @@ addEventListener('keydown',e=>{
 if(e.code==='Space'){e.preventDefault();ensureAC();
 /* Пробел проматывает текст модалки (см. обработчик выше) — бросок
    запускаем, только когда пергамент закрыт, иначе кубик летел «вслепую»
-   прямо во время чтения легенды или правил */
-if(modal.style.display!=='flex')rollDice();}
-if(/^Digit[1-4]$/.test(e.code)&&modal.style.display==='flex'){
+   прямо во время чтения легенды или правил. 🤖 Во время хода бота
+   Пробел ничего не делает — бот бросает сам. */
+if(modal.style.display!=='flex'&&!botActive())rollDice();}
+if(/^Digit[1-4]$/.test(e.code)&&modal.style.display==='flex'&&!modalForBot){   /* 🤖 за бота кнопки не жмём */
 const i=+e.code.slice(5)-1;
 if(modalChoices[i]&&mB.children[i]){
 highlightFork(i);
@@ -5362,7 +5650,8 @@ if(legendBtn){
     sClick();
     legendBtn.blur();
 
-    if(modal.style.display!=='flex'){
+    /* 🤖 во время хода бота легенду не открываем — её тут же закрыл бы бот */
+    if(modal.style.display!=='flex'&&!botActive()){
       showLegend();
     }
   };
@@ -5416,7 +5705,7 @@ function showLegend(){
 }
 
 addEventListener('keydown',e=>{
-  if(e.code==='KeyL' && modal.style.display!=='flex'){
+  if(e.code==='KeyL' && modal.style.display!=='flex' && !botActive()){   /* 🤖 не мешаем боту */
     showLegend();
   }
 });
