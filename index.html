@@ -1,4 +1,5 @@
 
+
 <!DOCTYPE html>
 <html lang="ru">
 <head>
@@ -186,6 +187,11 @@ transition:opacity .4s ease;}
    клавиатуры (disabled). Внешне кнопки приглушены — видно, что они чужие. */
 #modal.botPick #mBtns{cursor:not-allowed;}
 #modal.botPick #mBtns button{pointer-events:none;filter:grayscale(.45) brightness(.82);}
+
+/* ===== 🗺 ВИД СВЕРХУ: пергамент с вариантами временно уходит с экрана =====
+   Не закрываем модалку (состояние выбора и колбэки должны уцелеть),
+   а прячем через visibility — при возврате к столу всё появляется как было. */
+#modal.mapView{visibility:hidden;pointer-events:none;}
 
 /* ===== СЦЕНИЧЕСКИЙ РЕЖИМ: карта свёрнута, на столе диорама ===== */
 #hud{transition:opacity .5s ease;}
@@ -396,7 +402,7 @@ justify-content:flex-end;align-items:baseline;gap:6px 14px;font-size:13px;}
 • 💬 Фигурки иногда переговариваются во время сцен. Не принимай это как подсказку. Или принимай.<br>
 • 🏅 В конце похода на табло выдают деревянные значки за подвиги: «Белкин друг», «Гроза капищ», «Ползком, но дополз» и другие.<br>
 • Каждый раунд меняется погода: туман, дождь, ночь со светлячками — лес звучит по-разному. Дождь мешает отдыху у костра, ночь щедрее к молитвам у капища.<br>
-• 🎥 Камера: тяни мышью (или пальцем), чтобы облететь фигурку; двойной клик — вернуть привычный вид. Колесо — зум, O — обзор, L — легенда, M — музыка.
+• 🎥 Камера: тяни мышью (или пальцем), чтобы облететь фигурку; двойной клик — вернуть привычный вид. Колесо — зум, O — обзор, L — легенда, M — музыка. В виде сверху 🗺 пергамент с вариантами временно исчезает, чтобы не загораживать карту, — вернись к столу (🔍), и он появится обратно со всеми кнопками.
 • 🧰 Панель в правом верхнем углу (🎵 🔊 🗺 ℹ ⟳) доступна всегда — даже во время событий и сцен: музыку и звук можно переключить, не дожидаясь конца постановки. ℹ не открывается поверх идущей сцены — легенда и пергамент события живут в одном окне.
 </div>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
@@ -2091,27 +2097,35 @@ let camFocusTimer=null;
 
 const lookCur=new THREE.Vector3(0,1,Z_TOP-4);
 const tmpV=new THREE.Vector3(),tmpLook=new THREE.Vector3();
+/* ===== ПЛАВНОСТЬ КАМЕРЫ: обычный режим и кинематографичный =====
+   camSlow > 0 — камера ведёт цель медленно и кинематографично: так она
+   летит к следующему игроку после диорамы. Ведение фигурки по карте и
+   возврат от кубика остаются быстрыми — иначе игра ощущалась бы вязкой.
+   Значение само спадает в ноль, поэтому один дальний перелёт не влияет
+   на последующие. */
+let camSlow=0;
 function focusDice(cb){
+  /* 🗺 уходим к кубику — вид сверху сбрасывается: карта всё равно не видна,
+     а туман и лампа должны вернуться в нормальное состояние к броску */
+  if(zoomT>.5){zoomT=0;syncViewUi();}
+  camSlow=0;   /* 🎬 киношный перелёт (если шёл) окончен — дальше отзывчивая камера */
+
   camFocus={
     pos:new THREE.Vector3(TRAY.x+11,15,TRAY.z+14),
     look:new THREE.Vector3(TRAY.x,2,TRAY.z)
   };
 
+  /* 🎲 камера не летит, а телепортируется к лотку мгновенно:
+     ставим её в точку съёмки сразу — проверка «долетели» в главном цикле
+     сработает уже на следующем кадре и запустит бросок */
+  camera.position.copy(camFocus.pos);
+  lookCur.copy(camFocus.look);
+  camera.lookAt(lookCur);
+
   camFocusCb = cb || null;
 
   clearTimeout(camFocusTimer);
-
-  // страховка: если камера по какой-то причине долго не доезжает,
-  // всё равно запускаем кубик максимум через 2200 мс
-  if(cb){
-    camFocusTimer = setTimeout(()=>{
-      if(camFocusCb){
-        const fn = camFocusCb;
-        camFocusCb = null;
-        fn();
-      }
-    }, 2200);
-  }
+  camFocusTimer = null;
 }
 
 function unfocus(){
@@ -3468,6 +3482,33 @@ if(g.userData.lid)openStageChest(g);});
 landed++;if(landed===parts.length){renderer.shadowMap.needsUpdate=true;
 if(onAll)setTimeout(onAll,140);}});
 },i*90);});}
+/* ===== 🧊 ЗАМОРОЗКА МАТРИЦ СТАТИЧНОГО ЛЕСА =====
+   Дуги леса (forestCache.parts) — сотни мешей — после приземления стоят
+   неподвижно всю сцену: двигаются только объекты из stage.anim (у них
+   выставлен userData.anim — их не трогаем). Отключаем у статики
+   matrixAutoUpdate и запекаем matrixWorld один раз: рендерер перестаёт
+   каждый кадр пересчитывать compose+умножение матриц всей чащи
+   (заметная экономия CPU на слабых машинах и мобильных).
+   Картинка не меняется: запечённые матрицы идентичны вычисляемым, а у
+   движущегося анимированного родителя three.js принудительно обновляет
+   matrixWorld всех детей (force-флаг в updateMatrixWorld).
+   Перед уборкой со стола (stageEnd) заморозка снимается — реквизит
+   снова летит, трансформации оживают. */
+function freezeForest(){
+  const P=forestCache.parts;
+  for(let i=0;i<P.length;i++){const g=P[i];
+    if(g.userData.mxLocked)continue;
+    g.traverse(o=>{if(!o.userData.anim)o.matrixAutoUpdate=false;});
+    g.updateMatrixWorld(true);
+    g.userData.mxLocked=true;}
+}
+function unfreezeForest(){
+  const P=forestCache.parts;
+  for(let i=0;i<P.length;i++){const g=P[i];
+    if(!g.userData.mxLocked)continue;
+    g.traverse(o=>{o.matrixAutoUpdate=true;});
+    g.userData.mxLocked=false;}
+}
 /* ===== БОЛТОВНЯ ФИГУРОК: реплики над диорамой =====
    Пока идёт сцена, фигурка зрителя иногда «комментирует» происходящее.
    Облачко — спрайт с текстом реплики, без подписи: и так видно,
@@ -3754,6 +3795,7 @@ setTimeout(()=>{foldMap();},900);
 setTimeout(()=>{
 sMagic();
 placeParts(parts,()=>{
+freezeForest();   /* 🧊 лес приземлился и замер — матрицы заморожены до уборки */
 /* ФАЗА 4: фигурки ставят рядом с диорамой — смотреть сцену */
 placeSpectators();
 banner(kind==='event'&&ev?('• '+ev.t+' •'):(RIBBON[kind]||''),
@@ -3772,6 +3814,7 @@ liftFigs();
 /* реквизит сметают со стола (декорации из кэша — не уничтожаем,
    они вернутся на стол в следующем событии) */
 const parts=stage.parts;
+unfreezeForest();   /* 🧊 снимаем заморозку: реквизит сейчас сметут со стола */
 if(parts.length){sSweep();
 parts.forEach((g,i)=>{setTimeout(()=>{
 const y0=g.position.y,s0=g.userData.s0||new THREE.Vector3(1,1,1);
@@ -3802,9 +3845,27 @@ setTimeout(()=>{sUnfoldTick();unfoldMap();},tSweep);
 setTimeout(()=>{expandScatter();},tSweep+780);
 /* ФАЗА 4: фигурки опускаются на уже развёрнутую карту */
 setTimeout(()=>{spectatorsBack();},tSweep+1250);
-setTimeout(()=>{unfocus();},tSweep+950);
+/* 🎥 Камера остаётся на режиссёрской точке, пока стол не восстановлен
+   и ход не передан: освобождаем её ПОСЛЕ onDone (endTurn), чтобы она
+   одним плавным дуговым перелётом ушла сразу к СЛЕДУЮЩЕМУ игроку,
+   а не сперва к тому, кто только что отыграл сцену, и не меняла курс
+   на середине пути. Точку слежения сразу ставим на нового путника —
+   иначе камера сперва погналась бы за старым (полёт по дуге), а лампа
+   над столом должна светить тому, чей теперь ход. */
 setTimeout(()=>{stage.active=false;stage.parts=[];
-renderer.shadowMap.needsUpdate=true;onDone&&onDone();},tSweep+2450);}
+renderer.shadowMap.needsUpdate=true;
+if(onDone)onDone();
+const np=players[cur];
+if(np&&np.fig)follow.set(np.fig.position.x,0,np.fig.position.z);
+/* 🎬 дальний перелёт к следующему игроку — медленный и плавный:
+   камера стартует с режиссёрской точки и идёт к новой фигурке
+   не рывком, а долгим планом, постепенно набирая обычную скорость */
+const fp=np&&np.fig?np.fig.position:null;
+/* целевая точка свободной камеры при yaw=0: (x, 46, z+32) — оцениваем
+   дальность перелёта, чтобы рядом со сценой не замедляться зря */
+const fd=fp?Math.hypot(camera.position.x-fp.x,camera.position.y-46,camera.position.z-(fp.z+32)):0;
+camSlow=fd>70?1:clamp(fd/70,0,1);
+unfocus();},tSweep+2450);}
 /* ============================================================
 ПОГОДА (светлая, плавная, видимая)
 ============================================================ */
@@ -4172,6 +4233,7 @@ function startGame(nH){
   updateWChip();
   startMusic();
   setAmbient(true);   /* 🌧 шум леса под текущую погоду */
+  pkbSaveNow();       /* ☁️ настройки и состав экспедиции — в облако */
 
   log('🏕','Поход начался: '+nH+' '+plural(nH,['фигурка','фигурки','фигурок'])+' на тропе ('+players.map(p=>CLS[p.cls].icon).join(' ')+')','good');
   players.filter(q=>q.bot).forEach(q=>{
@@ -4205,6 +4267,9 @@ function rollDice(){
   rollBtn.classList.add('hidden');
 
   focusDice(()=>{
+    /* 🎬 полсекунды тишины после телепорта: камера уже на лотке,
+       кубик ещё лежит неподвижно — и только потом начинается бросок */
+    setTimeout(()=>{
     sDice();
 
     const v=RI(1,6);
@@ -4230,6 +4295,7 @@ function rollDice(){
 
       afterRoll(v);
     });
+    },500);
   });
 }
 function afterRoll(v){
@@ -4937,13 +5003,18 @@ function land(){
 }
 function endTurn(){
 hideModal();clearForkFx();
-let guard=0;
+let guard=0,roundDone=false;
 do{cur=(cur+1)%players.length;
-if(cur===0){round++;if(round>1&&Math.random()<.85)changeWeather();}
+if(cur===0){round++;roundDone=true;if(round>1&&Math.random()<.85)changeWeather();}
 guard++;}while(players[cur].finished&&guard<=players.length);
 if(players.every(q=>q.finished)){gameOver();return;}
 updateWChip();
-showPassOrStart();}
+/* 📺 Пикабу Игры: завершённый круг ходов — естественная пауза между
+   уровнями игры. pkbRoundAd сам решает, показывать ли редкую
+   fullscreen-рекламу (см. условия внизу файла), и ГАРАНТИРОВАННО
+   вызывает продолжение (showPassOrStart) при любом исходе. */
+if(roundDone)pkbRoundAd(showPassOrStart);
+else showPassOrStart();}
 /* ===== ЭКРАН ПЕРЕДАЧИ ХОДА: стол переходит следующему игроку ===== */
 const passEl=document.getElementById('pass');
 function showPassScreen(p,cb){
@@ -4996,6 +5067,7 @@ else startTurn(false);}
 function gameOver(){
   mode='END';
   clearBotTimers();          /* 🤖 партия окончена — никаких отложенных ходов */
+  pkbOnGameOver();           /* ☁️ летопись партии — в облачные сохранения */
   rollBtn.classList.add('hidden');
   unfocus();
   arrow.visible=ring.visible=false;
@@ -5258,10 +5330,16 @@ document.getElementById('rules').classList.toggle('hidden');sClick();this.blur()
 buildSel();
 const musBtn=document.getElementById('musBtn'),sfxBtn=document.getElementById('sfxBtn'),
 viewBtn=document.getElementById('viewBtn');
-function toggleMusic(){musicOn=!musicOn;musBtn.textContent=musicOn?'🎵':'🚫';if(musicOn)ensureAC();}
-function toggleSfx(){sfxOn=!sfxOn;sfxBtn.textContent=sfxOn?'🔊':'🔇';setAmbient(sfxOn);}
+function toggleMusic(){musicOn=!musicOn;musBtn.textContent=musicOn?'🎵':'🚫';if(musicOn)ensureAC();pkbSaveNow();}
+function toggleSfx(){sfxOn=!sfxOn;sfxBtn.textContent=sfxOn?'🔊':'🔇';setAmbient(sfxOn);pkbSaveNow();}
 let zoomT=0;
-function toggleView(){zoomT=zoomT>.5?0:1;viewBtn.textContent=zoomT>.5?'🔍':'🗺';}
+/* 🗺 в виде сверху пергамент с вариантами прячется, при возврате — снова на столе */
+function syncViewUi(){
+const top=zoomT>.5;
+viewBtn.textContent=top?'🔍':'🗺';
+modal.classList.toggle('mapView',top);
+}
+function toggleView(){zoomT=zoomT>.5?0:1;syncViewUi();}
 musBtn.onclick=()=>{toggleMusic();musBtn.blur();};
 sfxBtn.onclick=()=>{toggleSfx();sfxBtn.blur();};
 viewBtn.onclick=()=>{toggleView();viewBtn.blur();};
@@ -5283,7 +5361,7 @@ restartBtnEl.onclick=function(){
     restartBtnEl.title='Начать заново';
     restartArm=null;},2800)};};
 addEventListener('wheel',e=>{zoomT=clamp(zoomT+Math.sign(e.deltaY)*.14,0,1);
-viewBtn.textContent=zoomT>.5?'🔍':'🗺';},{passive:true});
+syncViewUi();},{passive:true});
 addEventListener('keydown',e=>{
 if(e.code==='Space'){e.preventDefault();ensureAC();
 /* Пробел проматывает текст модалки (см. обработчик выше) — бросок
@@ -5291,7 +5369,7 @@ if(e.code==='Space'){e.preventDefault();ensureAC();
    прямо во время чтения легенды или правил. 🤖 Во время хода бота
    Пробел ничего не делает — бот бросает сам. */
 if(modal.style.display!=='flex'&&!botActive())rollDice();}
-if(/^Digit[1-4]$/.test(e.code)&&modal.style.display==='flex'&&!modalForBot){   /* 🤖 за бота кнопки не жмём */
+if(/^Digit[1-4]$/.test(e.code)&&modal.style.display==='flex'&&!modalForBot&&!modal.classList.contains('mapView')){   /* 🤖 за бота не жмём; 🗺 в виде сверху кнопок не видно */
 const i=+e.code.slice(5)-1;
 if(modalChoices[i]&&mB.children[i]){
 highlightFork(i);
@@ -5357,7 +5435,10 @@ if(bootDone)return;bootDone=true;
 clearInterval(loadTipT);loadTipT=null;
 loadSet(100,'Тропа готова!');
 if(loadEl){loadEl.classList.add('done');
-setTimeout(()=>{loadEl.style.display='none';},800);}}
+setTimeout(()=>{loadEl.style.display='none';},800);}
+/* 📺 Пикабу Игры: загрузка завершена, первый экран готов —
+   сообщаем платформе (если SDK к этому моменту инициализирован) */
+PKB.booted=true;pkbMaybeGameStarted();}
 async function boot(){
 /* страховка: даже если что-то пошло не так, экран не висит вечно */
 const failSafe=setTimeout(finishBoot,45000);
@@ -5473,18 +5554,20 @@ const dt=Math.min(.05,(now-last)/1000);last=now;tGlobal+=dt;
 stepTweens(dt);
 candleL.intensity=(weather==='night'?2.2:1.4)+Math.sin(tGlobal*13)*.2+Math.sin(tGlobal*31)*.12;
 fl.scale.y=1+Math.sin(tGlobal*17)*.25;
-flames.forEach((f,i)=>{f.scale.y=1+Math.sin(tGlobal*15+i*2)*.3;f.rotation.y+=dt*2;});
-campLights.forEach((l,i)=>l.intensity=.8+Math.sin(tGlobal*11+i)*.25);
-gems.forEach((gm,i)=>{gm.rotation.y+=dt*1.6;gm.position.y=3.4+Math.sin(tGlobal*2.2+i*2)*.18;});
-eventGlows.forEach((s,i)=>{
+{const A=flames;for(let i=0;i<A.length;i++){const f=A[i];
+f.scale.y=1+Math.sin(tGlobal*15+i*2)*.3;f.rotation.y+=dt*2;}}
+{const A=campLights;for(let i=0;i<A.length;i++)A[i].intensity=.8+Math.sin(tGlobal*11+i)*.25;}
+{const A=gems;for(let i=0;i<A.length;i++){const gm=A[i];
+gm.rotation.y+=dt*1.6;gm.position.y=3.4+Math.sin(tGlobal*2.2+i*2)*.18;}}
+{const A=eventGlows;for(let i=0;i<A.length;i++){const s=A[i];
   s.material.opacity=.7+Math.sin(tGlobal*3+i)*.25;
   s.position.y=3.1+Math.sin(tGlobal*2.2+i)*.18;
-});
+}}
 if(finFlag)finFlag.rotation.y=Math.sin(tGlobal*2.4)*.35;
 /* лёгкое дыхание фигурок */
-players.forEach((p,i)=>{
-if(!(players.length&&i===cur&&mode==='ROLL_WAIT'))
-p.fig.rotation.z=Math.sin(tGlobal*1.6+i*2)*.035;});
+for(let i=0;i<players.length;i++){
+if(!(i===cur&&mode==='ROLL_WAIT'))
+players[i].fig.rotation.z=Math.sin(tGlobal*1.6+i*2)*.035;}
 if(ffPts.visible){const pos=ffPts.geometry.attributes.position;
 for(let i=0;i<FF;i++){const b=ffBase[i];
 pos.setXYZ(i,b.x+Math.sin(tGlobal*b.s+b.p)*3,b.y+Math.sin(tGlobal*1.3+b.p)*1.2,
@@ -5618,9 +5701,12 @@ const el=46+zoomK*92, dz=32-zoomK*28;
 const cp=Math.cos(orbit.pitch),sp=Math.sin(orbit.pitch);
 const oy=el*cp-dz*sp, oz=el*sp+dz*cp;
 tmpV.set(follow.x+oz*Math.sin(orbit.yaw),Math.max(6,oy),follow.z+oz*Math.cos(orbit.yaw));
-camera.position.lerp(tmpV,smooth(.06,dt));
+/* коэффициент сглаживания: 0 = обычный (.06), 1 = полностью кинематографичный (.014) */
+const ck=lerp(.06,.014,camSlow);
+camera.position.lerp(tmpV,smooth(ck,dt));
 tmpLook.set(follow.x,1,follow.z-4);
-lookCur.lerp(tmpLook,smooth(.08,dt));}
+lookCur.lerp(tmpLook,smooth(lerp(.08,.03,camSlow),dt));
+if(camSlow>0)camSlow=Math.max(0,camSlow-dt*.13);   /* спадает примерно за 7.7 с */}
 if(shake>0){camera.position.x+=R(-1,1)*shake;camera.position.y+=R(-1,1)*shake*.6;
 shake=Math.max(0,shake-dt*2.2);}
 camera.lookAt(lookCur);
@@ -5639,7 +5725,14 @@ renderer.render(scene,camera);}
 function resize(){
 renderer.setSize(innerWidth*RES,innerHeight*RES,false);
 camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();}
-addEventListener('resize',resize);resize();
+/* Шквал событий resize (перетаскивание окна, поворот экрана) сводим
+   к одному пересчёту за кадр: setSize реаллоцирует drawing buffer,
+   незачем делать это десятки раз подряд. Адаптивное разрешение
+   дёргает resize() напрямую — мимо очереди. */
+let resizeQ=false;
+addEventListener('resize',()=>{if(resizeQ)return;resizeQ=true;
+requestAnimationFrame(()=>{resizeQ=false;resize();});});
+resize();
 /* старт и финиш известны сразу, остальное — тайна */
 reveal(0);reveal(FIN_ID);
 requestAnimationFrame(loop);
@@ -5658,6 +5751,9 @@ if(legendBtn){
 }
 
 function showLegend(){
+  /* 🗺 легенда живёт в том же окне, что и пергамент: в виде сверху она была бы
+     невидима — поэтому перед открытием автоматически возвращаемся к столу */
+  if(zoomT>.5){zoomT=0;syncViewUi();}
   const relicLines=Object.values(RELICS)
     .map(r=>r.icon+' '+r.name+' — '+r.desc)
     .join('\n');
@@ -5709,6 +5805,243 @@ addEventListener('keydown',e=>{
     showLegend();
   }
 });
+
+/* ============================================================
+📺 PIKABU GAMES SDK
+Документация: https://games.pikabu.ru/sdk/docs/sdk/init
+              https://games.pikabu.ru/sdk/docs/sdk/ads
+Вне платформы Пикабу Игры (например, при локальном запуске файла)
+SDK не работает — игра продолжает работать как обычно: все вызовы
+обёрнуты в защиту, реклама просто никогда не показывается.
+============================================================ */
+const PKB={
+  sdk:null,            /* объект, возвращённый PkbSDK.init() */
+  initFailed:false,    /* SDK недоступен — больше не пробуем */
+  booted:false,        /* игра загружена (вызван finishBoot) */
+  started:false,       /* sdk.gameStarted() уже отправлен */
+  adActive:false,      /* прямо сейчас показывается реклама */
+  roundsDone:0,        /* завершённых кругов ходов за партию */
+  lastAdAt:0,          /* момент последнего показа (Date.now()) */
+  adsShown:0,          /* сколько показов состоялось */
+  /* --- ☁️ Облачные сохранения (sdk.storage) --- */
+  STORE_KEY:'trails_save_v1',
+  records:{plays:0,bestTotal:0,bestName:''},   /* летопись партий */
+  /* --- УСЛОВИЯ РЕДКОСТИ (настраиваются здесь) ---
+     Реклама не должна мешать игре, поэтому показываем её редко:
+     • первые 2 круга — никогда (игрок только втянулся);
+     • затем не чаще, чем каждый 3-й завершённый круг ходов;
+     • и не чаще, чем раз в 4 минуты (SDK дополнительно сам
+       ограничивает повторные показы интервалом 120 с — canShow()). */
+  AD_SKIP_FIRST_ROUNDS:2,
+  AD_EVERY_N_ROUNDS:3,
+  AD_MIN_GAP_MS:4*60*1000
+};
+
+/* Инициализация SDK — вызывается один раз после загрузки sdk.js */
+async function initSDK(){
+  if(PKB.sdk||PKB.initFailed)return;
+  try{
+    if(typeof PkbSDK==='undefined')throw new Error('PkbSDK недоступен');
+    PKB.sdk=await PkbSDK.init();
+    /* ☁️ подписка на ошибки облачных сохранений (в т.ч. автосохранения) */
+    try{if(PKB.sdk.on)PKB.sdk.on('storageSaveError',reason=>{
+      if(window.console&&console.warn)console.warn('PKB storageSaveError:',reason);
+    });}catch(e){}
+    pkbMaybeGameStarted();
+    pkbLoadCloud();      /* ☁️ облачное сохранение приоритетнее локального */
+  }catch(e){
+    PKB.initFailed=true;
+    if(window.console&&console.warn)console.warn('PKB SDK init:',e);
+  }
+}
+
+/* Подключаем скрипт SDK динамически (документированная альтернатива
+   <script async src="…/sdk.js" onload="initSDK()">) — так initSDK
+   гарантированно определён к моменту загрузки скрипта. */
+(function loadPkbSdk(){
+  try{
+    const s=document.createElement('script');
+    s.src='https://games.pikabu.ru/sdk/sdk.js';
+    s.async=true;
+    s.onload=initSDK;
+    s.onerror=()=>{PKB.initFailed=true;};
+    document.body.append(s);
+  }catch(e){PKB.initFailed=true;}
+})();
+
+/* gameStarted() — когда сошлись оба условия: SDK жив и игра загружена */
+function pkbMaybeGameStarted(){
+  if(PKB.started||!PKB.sdk||!PKB.booted)return;
+  PKB.started=true;
+  try{PKB.sdk.gameStarted();}catch(e){}
+}
+
+/* --- Единая пауза звука: два независимых повода ---
+   По техтребованиям платформы звук и игра останавливаются:
+   • 'ad'  — на время показа рекламы;
+   • 'tab' — при переключении вкладки / сворачивании браузера.
+   Игровой процесс в оба момента и так стоит: анимации привязаны к
+   requestAnimationFrame и в скрытой вкладке замирают сами, а ходы
+   развиваются только через анимации и клики игрока. Здесь глушим
+   звук, который живёт на setInterval и иначе играл бы фоном:
+   • остановить музыкальный таймер (mTimer) и таймеры «голосов леса»;
+   • увести громкость эмбиента в ноль (setAmbient(false));
+   • приостановить AudioContext — полная тишина.
+   Звук возвращается, только когда сняты ОБА повода. */
+const audioPaused={ad:false,tab:false};
+let audioAmbWasOn=false,audioMusicWasOn=false;
+function audioPause(why){
+  if(audioPaused[why])return;
+  const first=!audioPaused.ad&&!audioPaused.tab;
+  audioPaused[why]=true;
+  if(!first)return;                     /* звук уже заглушён другим поводом */
+  try{
+    audioAmbWasOn=amb.on;
+    audioMusicWasOn=!!mTimer;           /* в меню музыка ещё не играет — не заводим */
+    if(mTimer){clearInterval(mTimer);mTimer=null;}
+    if(amb.bugT){clearInterval(amb.bugT);amb.bugT=null;}
+    if(amb.voiceT){clearInterval(amb.voiceT);amb.voiceT=null;}
+    setAmbient(false);
+    if(AC&&AC.state==='running')AC.suspend();
+  }catch(e){}
+}
+function audioResume(why){
+  if(!audioPaused[why])return;
+  audioPaused[why]=false;
+  if(audioPaused.ad||audioPaused.tab)return;   /* второй повод ещё действует */
+  try{
+    if(AC&&AC.state==='suspended')AC.resume();
+    if(audioMusicWasOn)startMusic();   /* musicTick сам уважает флаг musicOn */
+    setAmbient(audioAmbWasOn);         /* возвращает потоки, таймеры и погоду */
+  }catch(e){}
+}
+
+/* Автопауза при переключении вкладки / сворачивании браузера */
+document.addEventListener('visibilitychange',()=>{
+  if(document.hidden)audioPause('tab');
+  else audioResume('tab');
+});
+
+/* --- Fullscreen-реклама после круга ходов ---
+   Вызывается из endTurn() как pkbRoundAd(showPassOrStart).
+   Колбэк next продолжает игру (экран передачи хода / следующий ход)
+   и вызывается ровно один раз при ЛЮБОМ исходе: показали рекламу,
+   отклонили по условиям редкости, canShow() вернул false или
+   произошла ошибка. Игра никогда не «зависает» из-за SDK. */
+async function pkbRoundAd(next){
+  let fired=false;
+  const done=()=>{if(!fired){fired=true;try{next();}catch(e){}}};
+  try{
+    PKB.roundsDone++;
+    if(!PKB.sdk||PKB.adActive)return done();
+    /* условия редкости — см. PKB.AD_* выше */
+    if(PKB.roundsDone<=PKB.AD_SKIP_FIRST_ROUNDS)return done();
+    if(PKB.roundsDone%PKB.AD_EVERY_N_ROUNDS!==0)return done();
+    if(PKB.lastAdAt&&Date.now()-PKB.lastAdAt<PKB.AD_MIN_GAP_MS)return done();
+    const fs=PKB.sdk.ads&&PKB.sdk.ads.fullscreen;
+    if(!fs||!fs.isSupported)return done();
+    /* canShow() — непосредственно перед показом; SDK сам не даст
+       показать рекламу раньше, чем через 120 с после предыдущей */
+    if(!await fs.canShow())return done();
+    PKB.adActive=true;
+    PKB.lastAdAt=Date.now();
+    audioPause('ad');         /* пауза фонового аудио на время показа */
+    await fs.show();          /* ждём завершения показа */
+    PKB.adsShown++;
+  }catch(e){
+    if(window.console&&console.warn)console.warn('PKB fullscreen ad:',e);
+  }finally{
+    try{if(PKB.adActive){PKB.adActive=false;audioResume('ad');}}catch(e){}
+    done();                   /* возобновляем игровой процесс */
+  }
+}
+
+/* ============================================================
+☁️ ОБЛАЧНЫЕ СОХРАНЕНИЯ — обязательное техтребование публикации
+   https://games.pikabu.ru/sdk/docs/sdk/storage
+   Данные пишутся в sdk.storage («ключ — значение», JSON, лимит
+   200 КБ, доступно и гостям):
+   • settings — музыка и звук;
+   • setup    — последний состав экспедиции (люди/боты, профессии);
+   • records  — число партий и лучший итог победителя.
+   Вне платформы (локальный запуск) и если sdk.js заблокирован
+   рекламным блокировщиком, работает запасной вариант localStorage —
+   игра остаётся работоспособной, настройки не теряются.
+   Сохранение партии на середине не делается осознанно: поход —
+   законченная сессия на несколько минут, перезапускается из меню.
+============================================================ */
+function pkbCollectSave(){
+  return {v:1,
+    settings:{musicOn:!!musicOn,sfxOn:!!sfxOn},
+    setup:{selH:selH,selB:selB,selCls:selCls.slice(0,4)},
+    records:{plays:PKB.records.plays|0,bestTotal:PKB.records.bestTotal|0,
+             bestName:String(PKB.records.bestName||'')}};
+}
+/* Записать сохранение: sdk.storage (синхронно, на сервер уходит сам
+   с небольшой задержкой) + зеркало в localStorage. withFlush —
+   явно дождаться записи на сервер (используем в конце партии). */
+function pkbSaveNow(withFlush){
+  const data=pkbCollectSave();
+  try{localStorage.setItem(PKB.STORE_KEY,JSON.stringify(data));}catch(e){}
+  try{
+    if(PKB.sdk&&PKB.sdk.storage){
+      PKB.sdk.storage.set(PKB.STORE_KEY,data);
+      if(withFlush&&PKB.sdk.storage.flush)
+        Promise.resolve(PKB.sdk.storage.flush()).then(r=>{
+          if(r&&!r.success&&window.console&&console.warn)console.warn('PKB flush:',r.reason);
+        }).catch(()=>{});
+    }
+  }catch(e){if(window.console&&console.warn)console.warn('PKB save:',e);}
+}
+function pkbLoadCloud(){
+  try{
+    if(!PKB.sdk||!PKB.sdk.storage)return;
+    const d=PKB.sdk.storage.get(PKB.STORE_KEY);
+    if(d)pkbApplySave(d);
+  }catch(e){}
+}
+/* Применить сохранение: настройки — всегда, состав экспедиции —
+   только в меню (чтобы не перекраивать начатую партию). */
+function pkbApplySave(d){
+  if(!d||typeof d!=='object')return;
+  try{
+    const s=d.settings;
+    if(s&&typeof s.musicOn==='boolean'&&s.musicOn!==musicOn){
+      musicOn=s.musicOn;musBtn.textContent=musicOn?'🎵':'🚫';}
+    if(s&&typeof s.sfxOn==='boolean'&&s.sfxOn!==sfxOn){
+      sfxOn=s.sfxOn;sfxBtn.textContent=sfxOn?'🔊':'🔇';
+      if(mode!=='MENU')setAmbient(sfxOn);   /* в меню эмбиент ещё не играет */
+    }
+    const u=d.setup;
+    if(u&&mode==='MENU'&&typeof u.selH==='number'&&u.selH>=1&&u.selH<=4){
+      selH=Math.round(u.selH);
+      selB=(typeof u.selB==='number')?Math.min(Math.max(0,Math.round(u.selB)),4-selH)
+                                     :Math.min(selB,4-selH);
+      if(Array.isArray(u.selCls))for(let i=0;i<4;i++)
+        if(Number.isInteger(u.selCls[i]))
+          selCls[i]=((u.selCls[i]%CLASSES.length)+CLASSES.length)%CLASSES.length;
+      refreshSel();
+    }
+    const r=d.records;
+    if(r&&typeof r==='object'){
+      PKB.records.plays=r.plays|0;
+      PKB.records.bestTotal=r.bestTotal|0;
+      if(typeof r.bestName==='string')PKB.records.bestName=r.bestName;
+    }
+  }catch(e){}
+}
+/* Партия окончена — обновить летопись и сохраниться с flush() */
+function pkbOnGameOver(){
+  try{
+    const w=players.slice().sort((a,b)=>b.pts-a.pts)[0];
+    PKB.records.plays++;
+    if(w&&w.pts>PKB.records.bestTotal){PKB.records.bestTotal=w.pts;PKB.records.bestName=w.name;}
+    pkbSaveNow(true);
+  }catch(e){}
+}
+/* На старте применяем локальное сохранение (работает и без SDK);
+   облачное перекроет его сразу после инициализации — см. initSDK() */
+try{const raw=localStorage.getItem(PKB.STORE_KEY);if(raw)pkbApplySave(JSON.parse(raw));}catch(e){}
 </script>
 </body>
 </html>
